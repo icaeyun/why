@@ -4,7 +4,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createCityBackdrop, setupBloom } from "./city-backdrop.js";
 
-const VERSION = "20260528003500";
+const VERSION = "20260528005500";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -90,6 +90,10 @@ loader.setDRACOLoader(dracoLoader);
 
 let rabbidMixer = null;
 let rabbidClips  = [];
+let rabbidAction = null;
+let rabbidPlayElapsed = 0;
+const RABBID_PLAY_INTERVAL = 5 * 60;
+const RABBID_MIXER_MAX_STEP = 1 / 30;
 
 const clock = new THREE.Clock();
 
@@ -296,15 +300,11 @@ const loadingEl = document.getElementById("loading");
 function showLoading(msg) { if (loadingEl) loadingEl.innerHTML = msg; }
 
 // ?? Rabbid: play once every 5 minutes ????????????????????????????
-function startRabbidTimer() {
-  setInterval(() => {
-    if (!rabbidMixer || !rabbidClips.length) return;
-    rabbidMixer.stopAllAction();
-    const action = rabbidMixer.clipAction(rabbidClips[0]);
-    action.setLoop(THREE.LoopOnce, 1);
-    action.clampWhenFinished = true;
-    action.reset().play();
-  }, 5 * 60 * 1000);
+function playRabbidOnce() {
+  if (!rabbidAction) return;
+  rabbidAction.enabled = true;
+  rabbidAction.paused = false;
+  rabbidAction.reset().play();
 }
 
 function loadRabbid() {
@@ -320,7 +320,13 @@ function loadRabbid() {
       if (gltf.animations && gltf.animations.length) {
         rabbidMixer = new THREE.AnimationMixer(rabbid);
         rabbidClips  = gltf.animations;
-        startRabbidTimer();
+        rabbidAction = rabbidMixer.clipAction(rabbidClips[0]);
+        rabbidAction.setLoop(THREE.LoopOnce, 1);
+        rabbidAction.clampWhenFinished = false;
+        rabbidAction.enabled = true;
+        rabbidMixer.addEventListener("finished", event => {
+          if (event.action === rabbidAction) rabbidAction.enabled = false;
+        });
       }
     })
     .catch(err => console.error("Rabbid:", err));
@@ -385,7 +391,14 @@ function animate() {
   scrollSmooth += (scrollTarget - scrollSmooth) * Math.min(delta * SMOOTH_SPEED, 1);
   applyCameraFromProgress(scrollSmooth);
   updateProgressUI(scrollSmooth);
-  if (rabbidMixer) rabbidMixer.update(delta);
+  if (rabbidMixer) {
+    rabbidMixer.update(Math.min(delta, RABBID_MIXER_MAX_STEP));
+    rabbidPlayElapsed += delta;
+    if (rabbidPlayElapsed >= RABBID_PLAY_INTERVAL && (!rabbidAction || !rabbidAction.isRunning())) {
+      rabbidPlayElapsed = 0;
+      playRabbidOnce();
+    }
+  }
   composer.render();
 }
 
