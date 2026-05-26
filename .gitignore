@@ -1,0 +1,12 @@
+﻿# local backup / temp
+assets/models/backup/
+assets/models/*backup*.glb
+assets/models/bad_*.glb
+js/main_backup_*.js
+references/*_tmp/
+references/*-main.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

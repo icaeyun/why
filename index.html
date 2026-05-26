@@ -1,0 +1,41 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diner</title>
+  <link rel="stylesheet" href="./css/style.css?v=20260528003500" />
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="build">20260528003500</div>
+  <div id="loading">Loading...</div>
+  <div id="hint">scroll to explore</div>
+
+  <script>
+    window.addEventListener("error", function(e) {
+      var el = document.getElementById("loading");
+      if (el && el.style.display !== "none") el.innerHTML = "JS ERROR<br><br>" + e.message;
+      console.error(e.message);
+    });
+    window.addEventListener("unhandledrejection", function(e) {
+      var el = document.getElementById("loading");
+      if (el && el.style.display !== "none") el.innerHTML = "JS ERROR<br><br>" + String(e.reason);
+      console.error(e.reason);
+    });
+  </script>
+
+  <script type="module" src="./js/main.js?v=20260528003500"></script>
+</body>
+</html>
+
+
+
