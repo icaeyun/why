@@ -253,7 +253,7 @@ function createUI() {
 function _syncAudioLocation() {
   if (!audioSystem) return;
   const isRainRear           = weatherMode === "rain" && activeRoute === BACK_ENTRY;
-  const isRainEntranceInside = weatherMode === "rain" && activeRoute !== BACK_ENTRY && camera.position.z < -0.5;
+  const isRainEntranceInside = weatherMode === "rain" && activeRoute !== BACK_ENTRY && camera.position.z < 1.0;
   const inside = isRainRear || isRainEntranceInside;
   if (inside !== _lastInsideState) {
     _lastInsideState = inside;

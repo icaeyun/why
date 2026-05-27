@@ -2,6 +2,11 @@ const SUNNY_AUDIO_URL       = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/
 const RAIN_AUDIO_URL        = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/rain.mp4";
 const INDOOR_RAIN_AUDIO_URL = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/Video%20Projects.mp4";
 
+const VOL_OUTDOOR = 0.35;
+const VOL_INDOOR  = 0.58;   // indoor louder
+const FADE_MS     = 700;    // fade-out duration ms
+const FADE_STEPS  = 24;
+
 const ICON_RAIN = [
   '<svg width="15" height="15" viewBox="0 0 15 15" fill="none"',
   ' stroke="currentColor" stroke-width="1.3" stroke-linecap="round">',
@@ -47,58 +52,101 @@ const ICON_MUTE = [
   '</svg>',
 ].join("");
 
-// ── Single audio element ──────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 let _audio      = null;
 let _muted      = false;
 let _unlocked   = false;
-let _currentUrl = "";   // what is currently loaded/playing
+let _currentUrl = "";
 let _curMode    = "sunny";
 let _isInside   = false;
+let _fadeTimer  = null;
+let _targetVol  = VOL_OUTDOOR;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function _urlFor(mode, inside) {
   if (mode !== "rain") return SUNNY_AUDIO_URL;
   return inside ? INDOOR_RAIN_AUDIO_URL : RAIN_AUDIO_URL;
 }
 
-function _switchAudio(url, debugInfo) {
-  if (!_audio) return;
-  if (url === _currentUrl) return;          // already playing this — do nothing
-  console.log("[AUDIO SWITCH]", { ...debugInfo, url });
-  _currentUrl = url;
-  _audio.pause();
-  _audio.src  = url;
-  _audio.load();
-  if (_unlocked && !_muted) {
-    _audio.play().catch(err => {
-      console.warn("[AUDIO] play() failed:", err, "url:", url);
-    });
-  }
+function _volFor(mode, inside) {
+  return (mode === "rain" && inside) ? VOL_INDOOR : VOL_OUTDOOR;
 }
 
+function _cancelFade() {
+  if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
+}
+
+// Gradually change _audio.volume from current to `to`, then call onDone
+function _fadeTo(to, onDone) {
+  _cancelFade();
+  if (!_audio) { if (onDone) onDone(); return; }
+  const from  = _audio.volume;
+  const delta = to - from;
+  if (Math.abs(delta) < 0.005) { _audio.volume = to; if (onDone) onDone(); return; }
+  const step = FADE_MS / FADE_STEPS;
+  let i = 0;
+  _fadeTimer = setInterval(() => {
+    i++;
+    _audio.volume = Math.max(0, Math.min(1, from + delta * (i / FADE_STEPS)));
+    if (i >= FADE_STEPS) {
+      _cancelFade();
+      _audio.volume = to;
+      if (onDone) onDone();
+    }
+  }, step);
+}
+
+// Immediate hard switch (for weather-mode changes — no fade needed)
+function _switchNow(url, targetVol, debugInfo) {
+  _cancelFade();
+  if (url === _currentUrl) { _targetVol = targetVol; return; }
+  console.log("[AUDIO SWITCH]", { ...debugInfo, url });
+  _currentUrl = url;
+  _targetVol  = targetVol;
+  _audio.pause();
+  _audio.src    = url;
+  _audio.load();
+  _audio.volume = _muted ? 0 : targetVol;
+  if (_unlocked && !_muted) _audio.play().catch(e => console.warn("[AUDIO]", e));
+}
+
+// Fade-out current → swap src → fade-in (for location transitions)
+function _crossfade(url, targetVol, debugInfo) {
+  if (url === _currentUrl) return;
+  _targetVol = targetVol;
+  _fadeTo(0, () => {
+    console.log("[AUDIO SWITCH]", { ...debugInfo, url });
+    _currentUrl   = url;
+    _audio.pause();
+    _audio.src    = url;
+    _audio.load();
+    _audio.volume = 0;
+    if (_unlocked && !_muted) {
+      _audio.play().catch(e => console.warn("[AUDIO]", e));
+    }
+    _fadeTo(targetVol, null);
+  });
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────────
 export function initAudio(onWeatherToggle) {
   _audio        = new Audio();
   _audio.loop   = true;
-  _audio.volume = 0.35;
-  // Do NOT set src here — wait until first unlock or setMode call
+  _audio.volume = VOL_OUTDOOR;
 
-  // Autoplay unlock on first user gesture
   const EVENTS = ["scroll", "click", "touchstart", "keydown"];
   const unlock = () => {
     if (_unlocked) return;
     _unlocked = true;
     EVENTS.forEach(e => window.removeEventListener(e, unlock));
     if (!_muted && _currentUrl) {
-      _audio.play().catch(err => {
-        console.warn("[AUDIO] unlock play() failed:", err);
-      });
+      _audio.volume = _targetVol;
+      _audio.play().catch(e => console.warn("[AUDIO] unlock:", e));
     }
   };
   EVENTS.forEach(e => window.addEventListener(e, unlock, { passive: true }));
 
-  // ── UI ────────────────────────────────────────────────────────────────────
-  let wxBtn   = null;
-  let muteBtn = null;
-
+  let wxBtn = null, muteBtn = null;
   const panel = document.createElement("div");
   panel.id = "soundPanel";
 
@@ -113,38 +161,39 @@ export function initAudio(onWeatherToggle) {
   muteBtn.className = "sound-btn";
   muteBtn.title     = "Toggle sound";
   muteBtn.innerHTML = ICON_VOL;
-  muteBtn.onclick   = () => {
+  muteBtn.onclick = () => {
     _muted = !_muted;
+    _cancelFade();
     if (_muted) {
       _audio.pause();
     } else if (_unlocked && _currentUrl) {
+      _audio.volume = _targetVol;
       _audio.play().catch(() => {});
     }
     muteBtn.innerHTML = _muted ? ICON_MUTE : ICON_VOL;
     muteBtn.classList.toggle("muted", _muted);
   };
   panel.appendChild(muteBtn);
-
   document.body.appendChild(panel);
 
-  // ── Controller ───────────────────────────────────────────────────────────
   return {
-    // Called by main.js when weather button is pressed
+    // Called on weather toggle — hard switch, no fade
     setMode(mode) {
       _curMode = mode;
-      // Keep _isInside as-is — location state is independent of weather toggle
       const url = _urlFor(_curMode, _isInside);
-      _switchAudio(url, { mode: _curMode, inside: _isInside });
+      const vol = _volFor(_curMode, _isInside);
+      _switchNow(url, vol, { mode: _curMode, inside: _isInside });
       if (wxBtn) wxBtn.innerHTML = _curMode === "rain" ? ICON_RAIN : ICON_SUN;
     },
 
-    // Called by main.js animate loop when inside/outside state changes
+    // Called on inside/outside state change — crossfade
     setLocation(inside) {
-      if (inside === _isInside) return;      // no change
+      if (inside === _isInside) return;
       _isInside = inside;
-      if (_curMode !== "rain") return;       // sunny → location irrelevant
+      if (_curMode !== "rain") return;
       const url = _urlFor(_curMode, _isInside);
-      _switchAudio(url, { mode: _curMode, inside: _isInside });
+      const vol = _volFor(_curMode, _isInside);
+      _crossfade(url, vol, { mode: _curMode, inside: _isInside });
     },
   };
 }
