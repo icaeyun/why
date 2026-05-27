@@ -61,6 +61,7 @@ let audioSystem = null;
 let weatherMode = "rain";
 
 let _interiorLights  = []; // [{ light, rain, sunny }]
+let _ceilGlowMeshes  = []; // rain-only ceiling glow panels
 let _dinerRoot       = null;
 const _matOriginals  = new Map(); // uuid → saved sunny-state values
 
@@ -270,6 +271,7 @@ function setWeatherMode(mode) {
   for (const { light, rain, sunny } of _interiorLights) {
     light.intensity = isRain ? rain : sunny;
   }
+  for (const m of _ceilGlowMeshes) m.visible = isRain;
 }
 
 function prepareMaterials(root, opts = {}) {
@@ -394,6 +396,71 @@ function addRabbidSoftLight(pos) {
   const rim = new THREE.PointLight(0xb8ccff, 0.22, 2.1);
   rim.position.set(pos.x + 0.55, pos.y + 0.85, pos.z - 0.45);
   scene.add(rim);
+}
+
+function addCeilingGlowStrips(root) {
+  _ceilGlowMeshes.forEach(m => scene.remove(m));
+  _ceilGlowMeshes = [];
+
+  const EXCL = /sign|sing|emissor|emissive|neon|menu|letter|logo|billboard|light|glass|window|door|metal|chrome|exterior|outside|stool|chair|booth|floor|tile|counter|railing|trim|frame/;
+
+  const _baseMat = {
+    transparent: true,
+    blending:    THREE.AdditiveBlending,
+    depthWrite:  false,
+    depthTest:   true,
+    toneMapped:  false,
+    side:        THREE.DoubleSide,
+  };
+
+  const _box = new THREE.Box3();
+  const _sz  = new THREE.Vector3();
+  const _ct  = new THREE.Vector3();
+
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const n = ((obj.name || '') + ' ' + (mats[0]?.name || '')).toLowerCase();
+    if (EXCL.test(n)) return;
+
+    _box.setFromObject(obj);
+    _box.getSize(_sz);
+    _box.getCenter(_ct);
+
+    if (_ct.y < 1.2)          return;
+    if (_sz.y > 0.5)          return;
+    if (_sz.x < 1.5)          return;
+    if (_sz.z < 1.5)          return;
+    if (_sz.y > _sz.x * 0.4) return;
+    if (_sz.y > _sz.z * 0.4) return;
+
+    const ceilingBottomY = _ct.y - _sz.y * 0.5;
+    const panelY = ceilingBottomY - 0.06;
+    const pw = _sz.x * 0.95;
+    const pd = _sz.z * 0.95;
+
+    const mkMat = (col, op) => new THREE.MeshBasicMaterial({
+      ..._baseMat, color: col, opacity: op, depthTest: true, depthWrite: false,
+    });
+
+    // Core — strong cherry red
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), mkMat(0xFF3A32, 0.55));
+    core.rotation.x = -Math.PI / 2;
+    core.position.set(_ct.x, panelY + 0.002, _ct.z);
+    core.renderOrder = 2;
+    core.visible = false;
+    scene.add(core);
+    _ceilGlowMeshes.push(core);
+
+    // Halo — soft wide spread
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(pw * 1.15, pd * 1.15), mkMat(0xB84A42, 0.13));
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.set(_ct.x, panelY - 0.003, _ct.z);
+    halo.renderOrder = 1;
+    halo.visible = false;
+    scene.add(halo);
+    _ceilGlowMeshes.push(halo);
+  });
 }
 
 function _addInteriorLight(color, x, y, z, distance, rain, sunny) {
@@ -600,6 +667,7 @@ function loadDiner() {
       _dinerRoot = diner;
       _saveMaterialOriginals(diner); // snapshot after prepareMaterials = sunny baseline
       addDinerInteriorGlow();
+      addCeilingGlowStrips(diner);
       setWeatherMode(weatherMode);
       createCityBackdrop(scene);
       createFrontBackdrop(scene);
