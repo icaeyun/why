@@ -271,7 +271,6 @@ function setWeatherMode(mode) {
   for (const { light, rain, sunny } of _interiorLights) {
     light.intensity = isRain ? rain : sunny;
   }
-  for (const m of _ceilGlowMeshes) m.visible = isRain;
 }
 
 function prepareMaterials(root, opts = {}) {
@@ -446,7 +445,7 @@ function addCeilingGlowStrips(root) {
     // Core — strong cherry red
     const core = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), mkMat(0xFF3A32, 0.55));
     core.rotation.x = -Math.PI / 2;
-    core.position.set(_ct.x, panelY + 0.002, _ct.z);
+    core.position.set(_ct.x, panelY + 0.002, _ct.z + 500.0);
     core.renderOrder = 2;
     core.visible = false;
     scene.add(core);
@@ -455,7 +454,7 @@ function addCeilingGlowStrips(root) {
     // Halo — soft wide spread
     const halo = new THREE.Mesh(new THREE.PlaneGeometry(pw * 1.15, pd * 1.15), mkMat(0xB84A42, 0.13));
     halo.rotation.x = -Math.PI / 2;
-    halo.position.set(_ct.x, panelY - 0.003, _ct.z);
+    halo.position.set(_ct.x, panelY - 0.003, _ct.z + 500.0);
     halo.renderOrder = 1;
     halo.visible = false;
     scene.add(halo);
@@ -667,7 +666,6 @@ function loadDiner() {
       _dinerRoot = diner;
       _saveMaterialOriginals(diner); // snapshot after prepareMaterials = sunny baseline
       addDinerInteriorGlow();
-      addCeilingGlowStrips(diner);
       setWeatherMode(weatherMode);
       createCityBackdrop(scene);
       createFrontBackdrop(scene);
