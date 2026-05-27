@@ -59,6 +59,7 @@ const SMOOTH_SPEED = 5.5;
 let rainSystem  = { update() {}, setActive() {} };
 let audioSystem = null;
 let weatherMode = "sunny";
+let _lastInsideState = null; // null = uninitialized
 
 let _interiorLights  = []; // [{ light, rain, sunny }]
 let _rabbidLights    = []; // [{ light, rainColor, sunnyColor }]
@@ -234,6 +235,8 @@ function createUI() {
     if (hintEl) hintEl.style.opacity = "1";
     applyCameraFromProgress(0);
     buildProgressUI(route);
+    _lastInsideState = null;   // force re-evaluate after route change
+    _syncAudioLocation();
   }
 
   document.getElementById("btnFront").onclick = () => switchRoute(FRONT_ENTRY, "btnFront", "btnBack");
@@ -247,6 +250,24 @@ function createUI() {
 }
 
 // ?? Model helpers ?????????????????????????????????????????????????
+function _syncAudioLocation() {
+  if (!audioSystem) return;
+  const isRainRear           = weatherMode === "rain" && activeRoute === BACK_ENTRY;
+  const isRainEntranceInside = weatherMode === "rain" && activeRoute !== BACK_ENTRY && camera.position.z < -0.5;
+  const inside = isRainRear || isRainEntranceInside;
+  if (inside !== _lastInsideState) {
+    _lastInsideState = inside;
+    console.log("[AUDIO ROUTE CHECK]", {
+      weatherMode,
+      route: activeRoute === BACK_ENTRY ? "BACK" : "FRONT",
+      isRainRear,
+      inside,
+      z: camera.position.z.toFixed(2),
+    });
+    audioSystem.setLocation(inside);
+  }
+}
+
 function setWeatherMode(mode) {
   weatherMode = mode;
   const isRain = mode === "rain";
@@ -254,7 +275,11 @@ function setWeatherMode(mode) {
   rainSystem.setActive(isRain);
   setGroundWet(isRain);
   setWeatherBackdrop(isRain);
-  if (audioSystem) audioSystem.setMode(mode);
+  if (audioSystem) {
+    audioSystem.setMode(mode);
+    _lastInsideState = null;   // force re-evaluate after mode change
+    _syncAudioLocation();
+  }
 
   // Material-level treatment (fixtures, signs, chrome, glass, floor)
   if (_dinerRoot) {
@@ -833,6 +858,8 @@ function animate() {
   applyCameraFromProgress(scrollSmooth);
   updateProgressUI(scrollSmooth);
   rainSystem.update(delta);
+
+  _syncAudioLocation(); // position-based inside/outside check
   if (rabbidMixer) {
     rabbidMixer.update(Math.min(delta, RABBID_MIXER_MAX_STEP));
     rabbidPlayElapsed += delta;

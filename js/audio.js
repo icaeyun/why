@@ -1,5 +1,6 @@
-const SUNNY_AUDIO_URL = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/forest.mp4";
-const RAIN_AUDIO_URL  = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/rain.mp4";
+const SUNNY_AUDIO_URL       = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/forest.mp4";
+const RAIN_AUDIO_URL        = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/rain.mp4";
+const INDOOR_RAIN_AUDIO_URL = "https://qxrrstnreesgmpopzbzm.supabase.co/storage/v1/object/public/nightdrive/Video%20Projects.mp4";
 
 const ICON_RAIN = [
   '<svg width="15" height="15" viewBox="0 0 15 15" fill="none"',
@@ -46,34 +47,55 @@ const ICON_MUTE = [
   '</svg>',
 ].join("");
 
-let _audio    = null;
-let _muted    = false;
-let _unlocked = false;
+// ── Single audio element ──────────────────────────────────────────────────────
+let _audio      = null;
+let _muted      = false;
+let _unlocked   = false;
+let _currentUrl = "";   // what is currently loaded/playing
+let _curMode    = "sunny";
+let _isInside   = false;
 
-function _tryPlay() {
-  if (!_audio || _muted || !_unlocked) return;
-  _audio.play().catch(() => {});
+function _urlFor(mode, inside) {
+  if (mode !== "rain") return SUNNY_AUDIO_URL;
+  return inside ? INDOOR_RAIN_AUDIO_URL : RAIN_AUDIO_URL;
 }
 
-// onWeatherToggle(mode) is called by the weather button with the new mode string
+function _switchAudio(url, debugInfo) {
+  if (!_audio) return;
+  if (url === _currentUrl) return;          // already playing this — do nothing
+  console.log("[AUDIO SWITCH]", { ...debugInfo, url });
+  _currentUrl = url;
+  _audio.pause();
+  _audio.src  = url;
+  _audio.load();
+  if (_unlocked && !_muted) {
+    _audio.play().catch(err => {
+      console.warn("[AUDIO] play() failed:", err, "url:", url);
+    });
+  }
+}
+
 export function initAudio(onWeatherToggle) {
-  _audio = new Audio();
+  _audio        = new Audio();
   _audio.loop   = true;
   _audio.volume = 0.35;
-  _audio.src    = RAIN_AUDIO_URL;
+  // Do NOT set src here — wait until first unlock or setMode call
 
-  // Autoplay unlock: play after first user gesture
+  // Autoplay unlock on first user gesture
   const EVENTS = ["scroll", "click", "touchstart", "keydown"];
   const unlock = () => {
     if (_unlocked) return;
     _unlocked = true;
-    _tryPlay();
     EVENTS.forEach(e => window.removeEventListener(e, unlock));
+    if (!_muted && _currentUrl) {
+      _audio.play().catch(err => {
+        console.warn("[AUDIO] unlock play() failed:", err);
+      });
+    }
   };
   EVENTS.forEach(e => window.addEventListener(e, unlock, { passive: true }));
 
-  // Build sound panel UI
-  let curMode = "rain";
+  // ── UI ────────────────────────────────────────────────────────────────────
   let wxBtn   = null;
   let muteBtn = null;
 
@@ -81,22 +103,22 @@ export function initAudio(onWeatherToggle) {
   panel.id = "soundPanel";
 
   wxBtn = document.createElement("button");
-  wxBtn.className   = "sound-btn";
-  wxBtn.title       = "Toggle weather";
-  wxBtn.innerHTML   = ICON_RAIN;
-  wxBtn.onclick     = () => onWeatherToggle(curMode === "rain" ? "sunny" : "rain");
+  wxBtn.className = "sound-btn";
+  wxBtn.title     = "Toggle weather";
+  wxBtn.innerHTML = ICON_SUN;
+  wxBtn.onclick   = () => onWeatherToggle(_curMode === "rain" ? "sunny" : "rain");
   panel.appendChild(wxBtn);
 
   muteBtn = document.createElement("button");
-  muteBtn.className   = "sound-btn";
-  muteBtn.title       = "Toggle sound";
-  muteBtn.innerHTML   = ICON_VOL;
-  muteBtn.onclick     = () => {
+  muteBtn.className = "sound-btn";
+  muteBtn.title     = "Toggle sound";
+  muteBtn.innerHTML = ICON_VOL;
+  muteBtn.onclick   = () => {
     _muted = !_muted;
     if (_muted) {
-      if (_audio) _audio.pause();
-    } else {
-      _tryPlay();
+      _audio.pause();
+    } else if (_unlocked && _currentUrl) {
+      _audio.play().catch(() => {});
     }
     muteBtn.innerHTML = _muted ? ICON_MUTE : ICON_VOL;
     muteBtn.classList.toggle("muted", _muted);
@@ -105,15 +127,24 @@ export function initAudio(onWeatherToggle) {
 
   document.body.appendChild(panel);
 
-  // Return controller so main.js can sync mode changes
+  // ── Controller ───────────────────────────────────────────────────────────
   return {
+    // Called by main.js when weather button is pressed
     setMode(mode) {
-      curMode = mode;
-      if (_audio) {
-        _audio.src = mode === "rain" ? RAIN_AUDIO_URL : SUNNY_AUDIO_URL;
-        _tryPlay();
-      }
-      if (wxBtn) wxBtn.innerHTML = mode === "rain" ? ICON_RAIN : ICON_SUN;
+      _curMode = mode;
+      // Keep _isInside as-is — location state is independent of weather toggle
+      const url = _urlFor(_curMode, _isInside);
+      _switchAudio(url, { mode: _curMode, inside: _isInside });
+      if (wxBtn) wxBtn.innerHTML = _curMode === "rain" ? ICON_RAIN : ICON_SUN;
+    },
+
+    // Called by main.js animate loop when inside/outside state changes
+    setLocation(inside) {
+      if (inside === _isInside) return;      // no change
+      _isInside = inside;
+      if (_curMode !== "rain") return;       // sunny → location irrelevant
+      const url = _urlFor(_curMode, _isInside);
+      _switchAudio(url, { mode: _curMode, inside: _isInside });
     },
   };
 }
