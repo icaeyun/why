@@ -54,7 +54,7 @@ for (const pt of [...FRONT_ENTRY, ...BACK_ENTRY]) {
 let scrollTarget = 0;
 let scrollSmooth = 0;
 const SCROLL_PX    = 5500;
-const SMOOTH_SPEED = 5.5;
+const SMOOTH_SPEED = 8.5;
 
 let rainSystem  = { update() {}, setActive() {} };
 let audioSystem = null;
@@ -118,9 +118,8 @@ function applyScrollHeight() {
 applyScrollHeight();
 
 window.addEventListener("scroll", () => {
-  const max = document.documentElement.scrollHeight - window.innerHeight;
-  scrollTarget = max > 0 ? window.scrollY / max : 0;
-});
+  scrollTarget = Math.min(window.scrollY / SCROLL_PX, 1);
+}, { passive: true });
 
 // ?? Camera interpolation ??????????????????????????????????????????
 function lerpAngle(a, b, t) {
@@ -853,8 +852,9 @@ window.addEventListener("resize", () => {
 // ?? Render loop ???????????????????????????????????????????????????
 function animate() {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta();
+  const delta = Math.min(clock.getDelta(), 1 / 30); // clamp: prevents jump after tab-switch
   scrollSmooth += (scrollTarget - scrollSmooth) * Math.min(delta * SMOOTH_SPEED, 1);
+  scrollSmooth = Math.max(0, Math.min(1, scrollSmooth));
   applyCameraFromProgress(scrollSmooth);
   updateProgressUI(scrollSmooth);
   rainSystem.update(delta);
