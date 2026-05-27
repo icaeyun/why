@@ -2,11 +2,11 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { createCityBackdrop, setupBloom } from "./city-backdrop.js";
+import { createCityBackdrop, setupBloom, setGroundWet } from "./city-backdrop.js";
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260528020000";
+const VERSION = "20260528030000";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -232,6 +232,7 @@ function createUI() {
 function setWeatherMode(mode) {
   weatherMode = mode;
   rainSystem.setActive(mode === "rain");
+  setGroundWet(mode === "rain");
   if (audioSystem) audioSystem.setMode(mode);
 }
 
@@ -379,6 +380,7 @@ function loadDiner() {
       scene.add(diner);
       addDinerInteriorGlow();
       createCityBackdrop(scene);
+      setGroundWet(weatherMode === "rain");
       rainSystem = createExteriorRain(scene, camera);
       rainSystem.setActive(weatherMode === "rain");
       applyCameraFromProgress(0);

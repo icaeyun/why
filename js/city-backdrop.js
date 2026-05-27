@@ -6,6 +6,16 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 const SYNTH_TEX = "./references/synthcity/assets/textures/";
 const TL = new THREE.TextureLoader();
 
+let _gndMesh = null;
+
+export function setGroundWet(wet) {
+  if (!_gndMesh) return;
+  const m = _gndMesh.material;
+  m.roughness = wet ? 0.06 : 0.98;
+  m.metalness = wet ? 0.28 : 0;
+  m.needsUpdate = true;
+}
+
 function loadTex(file, wrap) {
   const t = TL.load(SYNTH_TEX + file);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -44,6 +54,7 @@ export function createCityBackdrop(scene) {
   gnd.rotation.x = -Math.PI / 2;
   gnd.position.y = FLOOR_Y;
   scene.add(gnd);
+  _gndMesh = gnd;
 
   function band(col, op, w, h, y, z) {
     const mesh = new THREE.Mesh(
