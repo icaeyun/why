@@ -1,25 +1,52 @@
 * { box-sizing: border-box; }
 
-html {
-  margin: 0;
-  width: 100%;
-}
+html { margin: 0; width: 100%; }
 
 body {
   margin: 0;
   width: 100%;
   background: #07091a;
-  font-family: 'Arial', sans-serif;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   overflow-x: hidden;
   overflow-y: scroll;
 }
 
 canvas {
   position: fixed;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
   display: block;
   z-index: 1;
+}
+
+/* ── Cinematic letterbox edges ────────────────────────────────── */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  left: 0; right: 0;
+  height: 1px;
+  z-index: 25;
+  pointer-events: none;
+}
+body::before {
+  top: 0;
+  background: linear-gradient(
+    to right,
+    transparent 4%,
+    rgba(215, 165, 55, 0.16) 20%,
+    rgba(215, 165, 55, 0.16) 80%,
+    transparent 96%
+  );
+}
+body::after {
+  bottom: 0;
+  background: linear-gradient(
+    to right,
+    transparent 4%,
+    rgba(215, 165, 55, 0.08) 20%,
+    rgba(215, 165, 55, 0.08) 80%,
+    transparent 96%
+  );
 }
 
 /* ── Loading ──────────────────────────────────────────────────── */
@@ -29,23 +56,25 @@ canvas {
   top: 50%;
   z-index: 30;
   transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
+  color: rgba(255, 238, 200, 0.55);
+  font-size: 10px;
   text-align: center;
   max-width: 80vw;
-  line-height: 1.7;
-  letter-spacing: 0.05em;
+  line-height: 2.4;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  font-weight: 300;
 }
 
 /* ── Build stamp ──────────────────────────────────────────────── */
 #build {
   position: fixed;
   left: 14px;
-  top: 12px;
+  top: 13px;
   z-index: 20;
-  color: rgba(255, 255, 255, 0.18);
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.07);
+  font-size: 9px;
+  letter-spacing: 0.06em;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
@@ -54,156 +83,179 @@ canvas {
 #hint {
   position: fixed;
   left: 50%;
-  bottom: 32px;
+  bottom: 40px;
   z-index: 20;
   transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 12px;
-  letter-spacing: 0.12em;
+  color: rgba(255, 225, 168, 0.22);
+  font-size: 8px;
+  letter-spacing: 0.42em;
   text-transform: uppercase;
+  font-weight: 300;
   pointer-events: none;
   user-select: none;
-  transition: opacity 1.2s ease;
+  transition: opacity 1.8s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  white-space: nowrap;
 }
 
 #hint::after {
   content: '';
   display: block;
   width: 1px;
-  height: 24px;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);
-  animation: hintDrop 1.8s ease-in-out infinite;
+  height: 18px;
+  background: linear-gradient(to bottom, rgba(215, 162, 50, 0.38), transparent);
+  animation: hintDrop 2.4s ease-in-out infinite;
 }
 
 @keyframes hintDrop {
-  0%   { opacity: 0; transform: translateY(-4px); }
-  40%  { opacity: 1; }
+  0%   { opacity: 0; transform: translateY(-6px); }
+  30%  { opacity: 1; }
   100% { opacity: 0; transform: translateY(10px); }
 }
 
 /* ── Route selector ───────────────────────────────────────────── */
 #routeUI {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 18px;
+  right: 20px;
   z-index: 20;
   display: flex;
-  gap: 8px;
+  align-items: baseline;
+  gap: 0;
 }
 
 .route-btn {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  padding: 7px 16px;
-  background: rgba(7, 9, 26, 0.72);
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 4px 0 6px;
+  margin: 0 12px;
+  color: rgba(255, 238, 198, 0.20);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
   cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.25s ease;
   outline: none;
+  position: relative;
+  transition: color 0.3s ease;
+}
+
+/* underline indicator */
+.route-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: rgba(215, 162, 50, 0);
+  transition: background 0.3s ease;
 }
 
 .route-btn:hover {
-  background: rgba(20, 30, 70, 0.85);
-  color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(100, 160, 255, 0.35);
+  color: rgba(255, 228, 165, 0.48);
 }
 
 .route-btn.active {
-  background: rgba(18, 40, 120, 0.88);
-  border-color: rgba(80, 150, 255, 0.6);
-  color: rgba(180, 210, 255, 1.0);
-  box-shadow: 0 0 12px rgba(80, 140, 255, 0.25), inset 0 0 8px rgba(60, 120, 255, 0.12);
+  color: rgba(255, 210, 95, 0.95);
 }
 
-/* ── Scroll progress bar (right edge) ────────────────────────── */
+.route-btn.active::after {
+  background: rgba(215, 162, 50, 0.55);
+}
+
+/* thin divider between buttons */
+#routeUI .route-btn + .route-btn {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  padding-left: 24px;
+  margin-left: 0;
+}
+
+/* ── Progress track (right edge) ─────────────────────────────── */
 #progressTrack {
   position: fixed;
-  right: 10px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 2px;
-  height: 160px;
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 2px;
+  width: 1px;
+  height: 110px;
+  background: rgba(255, 255, 255, 0.05);
   z-index: 20;
 }
 
 #progressFill {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  bottom: 0; left: 0;
   width: 100%;
   height: 0%;
-  background: linear-gradient(to top, #00ccff, #8833ff);
-  border-radius: 2px;
-  box-shadow: 0 0 6px rgba(0, 200, 255, 0.6), 0 0 14px rgba(136, 51, 255, 0.35);
+  background: rgba(210, 158, 45, 0.65);
+  box-shadow: 0 0 4px rgba(210, 158, 45, 0.40);
   transition: height 0.08s linear;
 }
 
-/* Waypoint dots on track */
+/* cursor dot at top of fill */
+#progressFill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(240, 190, 60, 0.90);
+  box-shadow: 0 0 5px rgba(240, 190, 60, 0.60);
+}
+
 .wp-dot {
   position: absolute;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 5px;
-  height: 5px;
+  width: 2px;
+  height: 2px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
+  background: rgba(255, 255, 255, 0.10);
+  transition: background 0.25s ease;
 }
 
 .wp-dot.active {
-  background: rgba(0, 200, 255, 0.9);
-  border-color: rgba(0, 200, 255, 0.7);
-  box-shadow: 0 0 5px rgba(0, 200, 255, 0.7);
+  background: rgba(210, 158, 45, 0.55);
 }
 
 /* ── Sound panel ──────────────────────────────────────────────── */
 #soundPanel {
   position: fixed;
-  left: 14px;
-  bottom: 14px;
+  left: 16px;
+  bottom: 16px;
   z-index: 20;
   display: flex;
-  gap: 6px;
+  gap: 14px;
+  align-items: center;
 }
 
 .sound-btn {
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 50%;
-  background: rgba(7, 9, 26, 0.72);
-  color: rgba(255, 255, 255, 0.52);
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  color: rgba(255, 228, 178, 0.24);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.25s ease;
+  transition: color 0.22s ease;
   outline: none;
   padding: 0;
 }
 
 .sound-btn:hover {
-  background: rgba(20, 30, 70, 0.85);
-  color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(100, 160, 255, 0.35);
+  color: rgba(255, 212, 100, 0.72);
 }
 
 .sound-btn.muted {
-  color: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.10);
 }
 
 .sound-btn svg {

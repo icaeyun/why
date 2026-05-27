@@ -2,11 +2,11 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop } from "./city-backdrop.js";
+import { createCityBackdrop, setupBloom, setGroundWet, createFrontBackdrop, setWeatherBackdrop } from "./city-backdrop.js";
 import { createExteriorRain } from "./rain-effect.js";
 import { initAudio } from "./audio.js";
 
-const VERSION = "20260528040000";
+const VERSION = "20260528050000";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -200,8 +200,8 @@ function createUI() {
   const ui = document.createElement("div");
   ui.id = "routeUI";
   ui.innerHTML = `
-    <button id="btnFront" class="route-btn active">Front Entry</button>
-    <button id="btnBack"  class="route-btn">Back Entry</button>
+    <button id="btnFront" class="route-btn active">Entrance</button>
+    <button id="btnBack"  class="route-btn">Rear</button>
   `;
   document.body.appendChild(ui);
 
@@ -233,6 +233,7 @@ function setWeatherMode(mode) {
   weatherMode = mode;
   rainSystem.setActive(mode === "rain");
   setGroundWet(mode === "rain");
+  setWeatherBackdrop(mode === "rain");
   if (audioSystem) audioSystem.setMode(mode);
 }
 

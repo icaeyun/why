@@ -6,7 +6,10 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 const SYNTH_TEX = "./references/synthcity/assets/textures/";
 const TL = new THREE.TextureLoader();
 
-let _gndMesh = null;
+let _gndMesh   = null;
+let _scene     = null;
+let _nightGroup = null;
+let _frontGroup = null;
 
 export function setGroundWet(wet) {
   if (!_gndMesh) return;
@@ -28,6 +31,7 @@ function rnd(a, b) {
 }
 
 export function createCityBackdrop(scene) {
+  _scene = scene;
   scene.background = new THREE.Color(0x07091a);
   scene.fog = new THREE.Fog(0x07091a, 20, 85);
 
@@ -56,6 +60,9 @@ export function createCityBackdrop(scene) {
   scene.add(gnd);
   _gndMesh = gnd;
 
+  _nightGroup = new THREE.Group();
+  _nightGroup.name = "nightGroup";
+
   function band(col, op, w, h, y, z) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
@@ -69,7 +76,7 @@ export function createCityBackdrop(scene) {
       })
     );
     mesh.position.set(0, y, z);
-    scene.add(mesh);
+    _nightGroup.add(mesh);
   }
 
   band(0x0d1e50, 0.38, 300, 32, 7, -35);
@@ -86,7 +93,7 @@ export function createCityBackdrop(scene) {
 
   const sg = new THREE.BufferGeometry();
   sg.setAttribute("position", new THREE.Float32BufferAttribute(sPts, 3));
-  scene.add(
+  _nightGroup.add(
     new THREE.Points(
       sg,
       new THREE.PointsMaterial({
@@ -98,6 +105,8 @@ export function createCityBackdrop(scene) {
       })
     )
   );
+
+  scene.add(_nightGroup);
 }
 
 // ── Front city backdrop ────────────────────────────────────────────────────
@@ -212,8 +221,24 @@ export function createFrontBackdrop(scene) {
     bld(matN, r( 14,  34), r(-12, 12), r(4, 10), r(5, 15), r(4, 9), "rside");
   }
 
+  _frontGroup = group;
   scene.add(group);
   return group;
+}
+
+export function setWeatherBackdrop(isRain) {
+  if (!_scene) return;
+  if (isRain) {
+    _scene.background.set(0x07091a);
+    if (_scene.fog) { _scene.fog.color.set(0x07091a); _scene.fog.near = 20; _scene.fog.far = 85; }
+    if (_nightGroup) _nightGroup.visible = true;
+    if (_frontGroup) _frontGroup.visible = true;
+  } else {
+    _scene.background.set(0x7ab0d4);
+    if (_scene.fog) { _scene.fog.color.set(0x8ec5dc); _scene.fog.near = 18; _scene.fog.far = 130; }
+    if (_nightGroup) _nightGroup.visible = false;
+    if (_frontGroup) _frontGroup.visible = false;
+  }
 }
 
 export function setupBloom(renderer, scene, camera) {

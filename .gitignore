@@ -5,6 +5,7 @@ assets/models/bad_*.glb
 js/main_backup_*.js
 references/*_tmp/
 references/*-main.zip
+no_cache_server.py
 
 # OS / editor
 .DS_Store
