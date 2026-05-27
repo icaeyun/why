@@ -58,7 +58,7 @@ const SMOOTH_SPEED = 5.5;
 
 let rainSystem  = { update() {}, setActive() {} };
 let audioSystem = null;
-let weatherMode = "rain";
+let weatherMode = "sunny";
 
 let _interiorLights  = []; // [{ light, rain, sunny }]
 let _rabbidLights    = []; // [{ light, rainColor, sunnyColor }]
@@ -567,8 +567,9 @@ function addFixtureLights(root) {
     const pos = new THREE.Vector3();
     obj.getWorldPosition(pos);
 
-    const isRedTube = /^lights(_01)?$/i.test(mat0.name || '');
-    const col = isRedTube ? 0xFF3838 : 0x48C8D8;
+    const isWhiteFixture = /^lights_1[2-7]_/i.test(obj.name);
+    const isRedTube = !isWhiteFixture && /^lights(_01)?$/i.test(mat0.name || '');
+    const col = isWhiteFixture ? 0xF0F4FF : (isRedTube ? 0xFF3838 : 0x48C8D8);
     const pt = new THREE.PointLight(col, 0, 9.0);
     pt.position.set(pos.x, pos.y - 0.08, pos.z);
     scene.add(pt);
@@ -667,8 +668,9 @@ function _applyRainMaterials(root) {
       // Armchair/booth seating — cherry red vinyl, rain only
       if (/armchair/.test(n)) {
         if (mat.color) mat.color.setHex(0xD14A43);
-        mat.roughness = 0.40;
-        mat.metalness = 0;
+        mat.roughness = 0.24;
+        mat.metalness = 0.04;
+        mat.envMapIntensity = 1.8;
         mat.emissiveIntensity = 0;
         if (mat.emissive) mat.emissive.set(0, 0, 0);
         mat.needsUpdate = true;
@@ -697,6 +699,14 @@ function _applyRainMaterials(root) {
         return;
       }
 
+      // Lights_12~17 — white fixtures (창고/후방 구역)
+      if (/^lights_1[2-7]_/i.test(obj.name)) {
+        mat.emissiveIntensity = 6.5;
+        if (mat.emissive) mat.emissive.setHex(0xF0F4FF);
+        mat.needsUpdate = true;
+        return;
+      }
+
       const isFixture = /light|lamp|bulb|fixture|emissor|fluor|tube/.test(n)
                      || orig.emissiveIntensity >= 1.0;
       const isSign    = /\bneon\b|sing_/.test(n);
@@ -721,30 +731,32 @@ function _applyRainMaterials(root) {
         mat.emissiveIntensity = 0.02;
         if (mat.emissive) mat.emissive.setHex(0x02060c);
       } else if (isChrome) {
-        mat.roughness = Math.min(orig.roughness, 0.04);
-        mat.metalness = Math.max(orig.metalness, 0.94);
-        mat.envMapIntensity = 2.8;
+        mat.roughness = Math.min(orig.roughness, 0.03);
+        mat.metalness = Math.max(orig.metalness, 0.96);
+        mat.envMapIntensity = 4.0;
         mat.emissiveIntensity = 0;
       } else if (isFloor) {
-        // Tint via color multiply — texture stays visible, just slightly cooler+darker
         if (orig.color && mat.color) {
           mat.color.copy(orig.color).multiplyScalar(0.72).lerp(new THREE.Color(0x8898AA), 0.18);
         }
-        mat.roughness = Math.min(orig.roughness, 0.38);
-        mat.metalness = Math.max(orig.metalness, 0.04);
-        mat.envMapIntensity = (orig.envMapIntensity ?? 1) * 1.4;
+        mat.roughness = Math.min(orig.roughness, 0.24);
+        mat.metalness = Math.max(orig.metalness, 0.06);
+        mat.envMapIntensity = (orig.envMapIntensity ?? 1) * 1.9;
         if (mat.emissive) mat.emissive.setHex(0x050810);
         mat.emissiveIntensity = 0.0;
       } else if (isCounter) {
-        mat.roughness = Math.min(orig.roughness, 0.22);
-        mat.metalness = Math.max(orig.metalness, 0.12);
+        mat.roughness = Math.min(orig.roughness, 0.12);
+        mat.metalness = Math.max(orig.metalness, 0.22);
+        mat.envMapIntensity = 2.6;
         if (orig.color && mat.color) mat.color.copy(orig.color).multiplyScalar(1.30);
       } else {
-        // Interior walls, ceiling, booths — lift albedo one tone, preserve mood
+        // Interior walls, ceiling, booths — lift albedo, slight polish
         mat.emissiveIntensity = orig.emissiveIntensity * 0.90;
         if (orig.emissive && mat.emissive) mat.emissive.copy(orig.emissive);
         if (orig.color && mat.color)
           mat.color.copy(orig.color).multiplyScalar(1.38).lerp(new THREE.Color(0xfff6ee), 0.07);
+        mat.roughness = Math.max((orig.roughness ?? 1) * 0.82, 0.10);
+        mat.envMapIntensity = (orig.envMapIntensity ?? 1) * 1.2;
       }
 
       mat.needsUpdate = true;
@@ -790,9 +802,9 @@ function loadDiner() {
       addDinerInteriorGlow();
       addCeilingLightFixtures(diner);
       addFixtureLights(diner);
-      setWeatherMode(weatherMode);
       createCityBackdrop(scene);
       createFrontBackdrop(scene);
+      setWeatherMode(weatherMode);
       setGroundWet(weatherMode === "rain");
       rainSystem = createExteriorRain(scene, camera);
       rainSystem.setActive(weatherMode === "rain");
