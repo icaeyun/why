@@ -245,9 +245,12 @@ export function setupBloom(renderer, scene, camera) {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.42,
-    0.30,
+    new THREE.Vector2(
+      Math.round(window.innerWidth  * 0.5),
+      Math.round(window.innerHeight * 0.5)
+    ),
+    0.40,
+    0.28,
     0.90
   );
   composer.addPass(bloom);

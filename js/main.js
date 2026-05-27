@@ -47,18 +47,22 @@ const BACK_ENTRY = [
 let activeRoute = FRONT_ENTRY;
 
 for (const pt of [...FRONT_ENTRY, ...BACK_ENTRY]) {
-  pt.y += 0.36;
+  pt.y += 0.65;
 }
 
 // ?? Scroll state ??????????????????????????????????????????????????
 let scrollTarget = 0;
 let scrollSmooth = 0;
 const SCROLL_PX    = 5500;
-const SMOOTH_SPEED = 4.0;
+const SMOOTH_SPEED = 5.5;
 
 let rainSystem  = { update() {}, setActive() {} };
 let audioSystem = null;
 let weatherMode = "rain";
+
+let _interiorLights  = []; // [{ light, rain, sunny }]
+let _dinerRoot       = null;
+const _matOriginals  = new Map(); // uuid → saved sunny-state values
 
 // ?? Scene ?????????????????????????????????????????????????????????
 const scene = new THREE.Scene();
@@ -69,7 +73,7 @@ camera.rotation.order = "YXZ";
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.60;
@@ -80,7 +84,8 @@ const composer = setupBloom(renderer, scene, camera);
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 0.72));
+const hemLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.72);
+scene.add(hemLight);
 const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
 keyLight.position.set(4, 7, 6);
 scene.add(keyLight);
@@ -141,7 +146,10 @@ function applyCameraFromProgress(p) {
   camera.rotation.y = lerpAngle(from.yaw, to.yaw, st);
   camera.rotation.z = 0;
   camera.fov = lerp(from.fov, to.fov, st);
-  camera.updateProjectionMatrix();
+  if (camera.fov !== _lastFov) {
+    camera.updateProjectionMatrix();
+    _lastFov = camera.fov;
+  }
 }
 
 // ?? UI: progress bar + waypoint dots + route buttons ?????????????
@@ -149,12 +157,17 @@ let progressFillEl = null;
 let waypointEls    = [];
 let hintEl         = null;
 let hintFaded      = false;
+let _lastSeg       = -1;
+let _lastFillPct   = -1;
+let _lastFov       = -1;
 
 function buildProgressUI(route) {
   // Remove old elements
   const old = document.getElementById("progressTrack");
   if (old) old.remove();
-  waypointEls = [];
+  waypointEls  = [];
+  _lastSeg     = -1;
+  _lastFillPct = -1;
 
   const track = document.createElement("div");
   track.id = "progressTrack";
@@ -178,17 +191,20 @@ function buildProgressUI(route) {
 
 function updateProgressUI(p) {
   if (progressFillEl) {
-    progressFillEl.style.height = (p * 100) + "%";
+    const pct = Math.round(p * 10000) / 100;
+    if (Math.abs(pct - _lastFillPct) > 0.05) {
+      progressFillEl.style.height = pct + "%";
+      _lastFillPct = pct;
+    }
   }
 
-  // Highlight active waypoint
   const n = activeRoute.length - 1;
   const seg = Math.min(Math.floor(p * n), n);
-  waypointEls.forEach((dot, i) => {
-    dot.classList.toggle("active", i <= seg);
-  });
+  if (seg !== _lastSeg) {
+    waypointEls.forEach((dot, i) => dot.classList.toggle("active", i <= seg));
+    _lastSeg = seg;
+  }
 
-  // Fade hint after first meaningful scroll
   if (!hintFaded && p > 0.02 && hintEl) {
     hintEl.style.opacity = "0";
     hintFaded = true;
@@ -231,10 +247,29 @@ function createUI() {
 // ?? Model helpers ?????????????????????????????????????????????????
 function setWeatherMode(mode) {
   weatherMode = mode;
-  rainSystem.setActive(mode === "rain");
-  setGroundWet(mode === "rain");
-  setWeatherBackdrop(mode === "rain");
+  const isRain = mode === "rain";
+
+  rainSystem.setActive(isRain);
+  setGroundWet(isRain);
+  setWeatherBackdrop(isRain);
   if (audioSystem) audioSystem.setMode(mode);
+
+  // Material-level treatment (fixtures, signs, chrome, glass, floor)
+  if (_dinerRoot) {
+    if (isRain) _applyRainMaterials(_dinerRoot);
+    else        _applySunnyMaterials(_dinerRoot);
+  }
+
+  hemLight.color.setHex(isRain ? 0xffeedd : 0xffffff);
+  hemLight.groundColor.setHex(isRain ? 0x060304 : 0x222222);
+  hemLight.intensity  = isRain ? 0.12 : 0.72;
+  keyLight.intensity  = isRain ? 0.00 : 1.25;
+  fillLight.intensity = isRain ? 0.00 : 0.42;
+  renderer.toneMappingExposure = isRain ? 0.48 : 0.60;
+
+  for (const { light, rain, sunny } of _interiorLights) {
+    light.intensity = isRain ? rain : sunny;
+  }
 }
 
 function prepareMaterials(root, opts = {}) {
@@ -360,14 +395,116 @@ function addRabbidSoftLight(pos) {
   scene.add(rim);
 }
 
-function addDinerInteriorGlow() {
-  const warm = new THREE.PointLight(0xffb36a, 0.42, 7.5);
-  warm.position.set(-1.65, 0.25, -2.25);
-  scene.add(warm);
+function _addInteriorLight(color, x, y, z, distance, rain, sunny) {
+  const light = new THREE.PointLight(color, sunny, distance);
+  light.position.set(x, y, z);
+  scene.add(light);
+  _interiorLights.push({ light, rain, sunny });
+}
 
-  const counter = new THREE.PointLight(0xffd2a0, 0.24, 5.2);
-  counter.position.set(0.35, 0.05, -1.25);
-  scene.add(counter);
+function addDinerInteriorGlow() {
+  _interiorLights = [];
+
+  // Ceiling fixture overhead — warm tungsten
+  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -0.6, 7.0, 0.38, 0.18);
+  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -2.2, 7.0, 0.35, 0.15);
+  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -3.6, 6.5, 0.30, 0.12);
+
+  // Neon sign bleed — cherry red
+  _addInteriorLight(0xFF2A3D,  0.4, 2.2,  0.9, 8.0, 0.28, 0.00);
+
+  // Window rain reflection — cyan (right wall)
+  _addInteriorLight(0x00C8FF,  3.3, 1.5, -0.3, 9.0, 0.24, 0.00);
+  _addInteriorLight(0x00C8FF,  3.3, 1.5, -1.9, 9.0, 0.22, 0.00);
+
+  // Under-counter warm strip
+  _addInteriorLight(0xFFB86B,  0.3, 0.7, -0.9, 5.0, 0.32, 0.20);
+  _addInteriorLight(0xFFB86B,  0.3, 0.7, -2.3, 5.0, 0.28, 0.16);
+}
+
+// ── Rain material system ───────────────────────────────────────────────────
+function _saveMaterialOriginals(root) {
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach(mat => {
+      if (!mat || _matOriginals.has(mat.uuid)) return;
+      _matOriginals.set(mat.uuid, {
+        emissiveIntensity: mat.emissiveIntensity ?? 0,
+        emissive:  mat.emissive  ? mat.emissive.clone()  : null,
+        roughness: mat.roughness ?? 1,
+        metalness: mat.metalness ?? 0,
+      });
+    });
+  });
+}
+
+function _applyRainMaterials(root) {
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach(mat => {
+      if (!mat) return;
+      const orig = _matOriginals.get(mat.uuid);
+      if (!orig) return;
+      const n = ((mat.name || '') + ' ' + (obj.name || '')).toLowerCase();
+
+      const isFixture = /light|lamp|bulb|fixture|emissor|ceiling|fluor|tube|ceil/.test(n)
+                     || orig.emissiveIntensity >= 1.0;
+      const isSign    = /sign|neon|logo|diner|script|sing_/.test(n);
+      const isGlass   = /glass|window|pane/.test(n)
+                     || (mat.transparent && (mat.opacity ?? 1) < 0.7);
+      const isChrome  = /chrome|metal|steel|stainless|aluminum|trim|edge/.test(n)
+                     || (orig.metalness > 0.45 && orig.roughness < 0.40);
+      const isFloor   = /floor|tile|linoleum|ground/.test(n);
+      const isCounter = /counter|tabletop|diner_top|bar_top/.test(n);
+
+      if (isFixture) {
+        mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.15, 0.90);
+        mat.emissive?.setHex(0xFFD7A0);
+      } else if (isSign) {
+        mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.2, 0.85);
+        mat.emissive?.setHex(0xFF2A3D);
+      } else if (isGlass) {
+        mat.roughness = 0.06;
+        mat.metalness = 0.12;
+        mat.emissiveIntensity = 0.05;
+        mat.emissive?.setHex(0x00080e);
+      } else if (isChrome) {
+        mat.roughness = Math.min(orig.roughness, 0.06);
+        mat.metalness = Math.max(orig.metalness, 0.90);
+        mat.emissiveIntensity = 0;
+      } else if (isFloor) {
+        mat.roughness = Math.min(orig.roughness, 0.28);
+        mat.metalness = Math.max(orig.metalness, 0.08);
+        mat.emissiveIntensity = orig.emissiveIntensity * 0.50;
+      } else if (isCounter) {
+        mat.roughness = Math.min(orig.roughness, 0.28);
+        mat.metalness = Math.max(orig.metalness, 0.10);
+      } else {
+        mat.emissiveIntensity = orig.emissiveIntensity * 0.75;
+      }
+
+      mat.needsUpdate = true;
+    });
+  });
+}
+
+function _applySunnyMaterials(root) {
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach(mat => {
+      if (!mat) return;
+      const orig = _matOriginals.get(mat.uuid);
+      if (!orig) return;
+      mat.emissiveIntensity = orig.emissiveIntensity;
+      if (orig.emissive && mat.emissive) mat.emissive.copy(orig.emissive);
+      mat.roughness = orig.roughness;
+      mat.metalness = orig.metalness;
+      mat.needsUpdate = true;
+    });
+  });
 }
 
 function loadDiner() {
@@ -379,7 +516,10 @@ function loadDiner() {
       centerModel(diner);
       diner.position.z += 11.1;
       scene.add(diner);
+      _dinerRoot = diner;
+      _saveMaterialOriginals(diner); // snapshot after prepareMaterials = sunny baseline
       addDinerInteriorGlow();
+      setWeatherMode(weatherMode);
       createCityBackdrop(scene);
       createFrontBackdrop(scene);
       setGroundWet(weatherMode === "rain");
@@ -397,7 +537,7 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   composer.setSize(window.innerWidth, window.innerHeight);
   applyScrollHeight();
 });

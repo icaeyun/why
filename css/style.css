@@ -240,7 +240,7 @@ body::after {
   height: 26px;
   border: none;
   background: none;
-  color: rgba(255, 228, 178, 0.24);
+  color: rgba(255, 228, 178, 0.58);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -251,11 +251,11 @@ body::after {
 }
 
 .sound-btn:hover {
-  color: rgba(255, 212, 100, 0.72);
+  color: rgba(255, 212, 100, 0.92);
 }
 
 .sound-btn.muted {
-  color: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.22);
 }
 
 .sound-btn svg {
