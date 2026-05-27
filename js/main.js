@@ -460,8 +460,10 @@ function _applyRainMaterials(root) {
       const isCounter = /counter|tabletop|diner_top|bar_top/.test(n);
 
       if (isFixture) {
-        mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.15, 0.90);
-        mat.emissive?.setHex(0xFFD7A0);
+        mat.emissiveIntensity = 6.0;
+        if (mat.emissive) {
+          mat.emissive.setHex(0x00C8FF);
+        }
       } else if (isSign) {
         mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.2, 0.85);
         mat.emissive?.setHex(0xFF2A3D);
