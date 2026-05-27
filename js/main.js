@@ -271,6 +271,7 @@ function setWeatherMode(mode) {
   for (const { light, rain, sunny } of _interiorLights) {
     light.intensity = isRain ? rain : sunny;
   }
+  for (const m of _ceilGlowMeshes) m.visible = isRain;
 }
 
 function prepareMaterials(root, opts = {}) {
@@ -462,6 +463,102 @@ function addCeilingGlowStrips(root) {
   });
 }
 
+function addCeilingLightFixtures(root) {
+  _ceilGlowMeshes.forEach(m => scene.remove(m));
+  _ceilGlowMeshes = [];
+
+  const EXCL = /sign|sing|emissor|emissive|neon|menu|letter|logo|billboard|light|glass|window|door|metal|chrome|exterior|outside|stool|chair|booth|floor|tile|counter|railing|trim|frame/;
+  const _b3  = new THREE.Box3();
+  const _szV = new THREE.Vector3();
+  const _ctV = new THREE.Vector3();
+
+  // Locate ceiling mesh to get anchor X/Z and actual underside Y
+  let anchorX = 0, anchorZ = -1.5, ceilingBottomY = 2.4;
+  let ceilFound = false;
+  root.traverse(obj => {
+    if (ceilFound || !obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const n = ((obj.name || '') + ' ' + (mats[0]?.name || '')).toLowerCase();
+    if (EXCL.test(n)) return;
+    _b3.setFromObject(obj);
+    _b3.getSize(_szV); _b3.getCenter(_ctV);
+    if (_ctV.y > 1.2 && _szV.y < 0.5 && _szV.x > 1.5 && _szV.z > 1.5
+        && _szV.y < _szV.x * 0.4 && _szV.y < _szV.z * 0.4) {
+      anchorX = _ctV.x; anchorZ = _ctV.z;
+      ceilingBottomY = _ctV.y - _szV.y * 0.5;
+      ceilFound = true;
+    }
+  });
+
+  // Find Lights / Lights_01 GLB mesh as geometry template
+  let tplMesh = null;
+  root.traverse(obj => {
+    if (tplMesh || !obj.isMesh) return;
+    const mat0 = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+    if (/^lights(_01)?$/i.test(obj.name) || /^lights(_01)?$/i.test(mat0?.name || '')) {
+      tplMesh = obj;
+    }
+  });
+  if (!tplMesh) return;
+
+  // World-space rotation + scale from template (diner has no custom scale so world == local)
+  tplMesh.updateWorldMatrix(true, false);
+  const wQuat = new THREE.Quaternion();
+  const wScale = new THREE.Vector3();
+  tplMesh.matrixWorld.decompose(new THREE.Vector3(), wQuat, wScale);
+
+  const baseMat = (Array.isArray(tplMesh.material) ? tplMesh.material[0] : tplMesh.material);
+  const placeY  = ceilingBottomY - 0.005;
+
+  [-1.4, 0, 1.4, 2.8].forEach(dz => {
+    const mat = baseMat.clone();
+    if (mat.emissive) mat.emissive.setHex(0x00C8FF); else mat.emissive = new THREE.Color(0x00C8FF);
+    mat.emissiveIntensity = 6.5;
+    mat.needsUpdate = true;
+
+    const mesh = new THREE.Mesh(tplMesh.geometry, mat);
+    mesh.position.set(anchorX, placeY, anchorZ + dz);
+    mesh.quaternion.copy(wQuat);
+    mesh.scale.copy(wScale);
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    scene.add(mesh);
+    _ceilGlowMeshes.push(mesh);
+
+    // PointLight for actual illumination — rain only, sunny=0
+    const pt = new THREE.PointLight(0x00C8FF, 0, 7.5);
+    pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
+    scene.add(pt);
+    _interiorLights.push({ light: pt, rain: 0.40, sunny: 0 });
+  });
+}
+
+function addFixtureLights(root) {
+  const seen = new Set();
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    if (seen.has(obj.uuid)) return;
+    seen.add(obj.uuid);
+    const mat0 = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+    if (!mat0) return;
+    const n = ((mat0.name || '') + ' ' + (obj.name || '')).toLowerCase();
+    const isFixture = /light|lamp|bulb|fixture|emissor|fluor|tube/.test(n)
+                   || (mat0.emissiveIntensity ?? 0) >= 1.0;
+    if (!isFixture) return;
+
+    obj.updateWorldMatrix(true, false);
+    const pos = new THREE.Vector3();
+    obj.getWorldPosition(pos);
+
+    const isRedTube = /^lights(_01)?$/i.test(mat0.name || '');
+    const col = isRedTube ? 0xFF3838 : 0x00C8FF;
+    const pt = new THREE.PointLight(col, 0, 9.0);
+    pt.position.set(pos.x, pos.y - 0.08, pos.z);
+    scene.add(pt);
+    _interiorLights.push({ light: pt, rain: 1.4, sunny: 0 });
+  });
+}
+
 function _addInteriorLight(color, x, y, z, distance, rain, sunny) {
   const light = new THREE.PointLight(color, sunny, distance);
   light.position.set(x, y, z);
@@ -587,10 +684,8 @@ function _applyRainMaterials(root) {
       const isCounter = /counter|tabletop|diner_top|bar_top/.test(n);
 
       if (isFixture) {
-        // Tube fluorescents (Lights / Lights_01) → warm cherry red glow
-        // Pendant emissor (Emissor, Emissor.001 …) → keeps cyan blue
         const isRedTube = /^lights(_01)?$/i.test(mat.name || '');
-        mat.emissiveIntensity = isRedTube ? 4.5 : 6.0;
+        mat.emissiveIntensity = isRedTube ? 6.5 : 6.5;
         if (mat.emissive) mat.emissive.setHex(isRedTube ? 0xFF3838 : 0x00C8FF);
       } else if (isSign) {
         // Cherry red neon accent only
@@ -666,6 +761,8 @@ function loadDiner() {
       _dinerRoot = diner;
       _saveMaterialOriginals(diner); // snapshot after prepareMaterials = sunny baseline
       addDinerInteriorGlow();
+      addCeilingLightFixtures(diner);
+      addFixtureLights(diner);
       setWeatherMode(weatherMode);
       createCityBackdrop(scene);
       createFrontBackdrop(scene);
