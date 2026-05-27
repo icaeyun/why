@@ -3,8 +3,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createCityBackdrop, setupBloom } from "./city-backdrop.js";
+import { createExteriorRain } from "./rain-effect.js";
+import { initAudio } from "./audio.js";
 
-const VERSION = "20260528005500";
+const VERSION = "20260528020000";
 const STT_DINER_PATH = "./assets/models/sttdiner.glb?v=" + VERSION;
 const DINER_PATH  = "./assets/models/diners.glb?v=" + VERSION;
 const RABBID_PATH = "./assets/models/animations_rabbid.glb?v=" + VERSION;
@@ -53,6 +55,10 @@ let scrollTarget = 0;
 let scrollSmooth = 0;
 const SCROLL_PX    = 5500;
 const SMOOTH_SPEED = 4.0;
+
+let rainSystem  = { update() {}, setActive() {} };
+let audioSystem = null;
+let weatherMode = "rain";
 
 // ?? Scene ?????????????????????????????????????????????????????????
 const scene = new THREE.Scene();
@@ -223,6 +229,12 @@ function createUI() {
 }
 
 // ?? Model helpers ?????????????????????????????????????????????????
+function setWeatherMode(mode) {
+  weatherMode = mode;
+  rainSystem.setActive(mode === "rain");
+  if (audioSystem) audioSystem.setMode(mode);
+}
+
 function prepareMaterials(root, opts = {}) {
   root.traverse(obj => {
     if (!obj.isMesh) return;
@@ -367,6 +379,8 @@ function loadDiner() {
       scene.add(diner);
       addDinerInteriorGlow();
       createCityBackdrop(scene);
+      rainSystem = createExteriorRain(scene, camera);
+      rainSystem.setActive(weatherMode === "rain");
       applyCameraFromProgress(0);
       if (loadingEl) loadingEl.style.display = "none";
       loadRabbid();
@@ -391,6 +405,7 @@ function animate() {
   scrollSmooth += (scrollTarget - scrollSmooth) * Math.min(delta * SMOOTH_SPEED, 1);
   applyCameraFromProgress(scrollSmooth);
   updateProgressUI(scrollSmooth);
+  rainSystem.update(delta);
   if (rabbidMixer) {
     rabbidMixer.update(Math.min(delta, RABBID_MIXER_MAX_STEP));
     rabbidPlayElapsed += delta;
@@ -403,6 +418,7 @@ function animate() {
 }
 
 createUI();
+audioSystem = initAudio(setWeatherMode);
 loadDiner();
 animate();
 
