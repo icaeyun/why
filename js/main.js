@@ -61,6 +61,7 @@ let audioSystem = null;
 let weatherMode = "rain";
 
 let _interiorLights  = []; // [{ light, rain, sunny }]
+let _rabbidLights    = []; // [{ light, rainColor, sunnyColor }]
 let _ceilGlowMeshes  = []; // rain-only ceiling glow panels
 let _dinerRoot       = null;
 const _matOriginals  = new Map(); // uuid → saved sunny-state values
@@ -272,6 +273,10 @@ function setWeatherMode(mode) {
     light.intensity = isRain ? rain : sunny;
   }
   for (const m of _ceilGlowMeshes) m.visible = isRain;
+  for (const { light, rainColor, sunnyColor, rainInt, sunnyInt } of _rabbidLights) {
+    light.color.setHex(isRain ? rainColor : sunnyColor);
+    light.intensity = isRain ? rainInt : sunnyInt;
+  }
 }
 
 function prepareMaterials(root, opts = {}) {
@@ -385,17 +390,29 @@ function loadRabbid() {
 }
 
 function addRabbidSoftLight(pos) {
+  _rabbidLights = [];
+
   const underFace = new THREE.PointLight(0xffdfbd, 0.88, 2.0);
-  underFace.position.set(pos.x + 0.06, pos.y + 0.16, pos.z + 0.34);
+  underFace.position.set(pos.x + 0.35, pos.y + 0.48, pos.z + 0.15);
   scene.add(underFace);
+  _rabbidLights.push({ light: underFace, sunnyColor: 0xffdfbd, rainColor: 0xFF3838, sunnyInt: 0.88, rainInt: 0 });
 
   const softFill = new THREE.PointLight(0xffffff, 0.28, 1.7);
   softFill.position.set(pos.x - 0.18, pos.y + 0.32, pos.z + 0.50);
   scene.add(softFill);
+  _rabbidLights.push({ light: softFill, sunnyColor: 0xffffff, rainColor: 0xFF3838, sunnyInt: 0.28, rainInt: 0 });
 
   const rim = new THREE.PointLight(0xb8ccff, 0.22, 2.1);
   rim.position.set(pos.x + 0.55, pos.y + 0.85, pos.z - 0.45);
   scene.add(rim);
+  _rabbidLights.push({ light: rim, sunnyColor: 0xb8ccff, rainColor: 0xFF3838, sunnyInt: 0.22, rainInt: 0 });
+
+  // 로드 시점에 현재 날씨 즉시 적용
+  const isRain = weatherMode === 'rain';
+  for (const { light, rainColor, sunnyColor, rainInt, sunnyInt } of _rabbidLights) {
+    light.color.setHex(isRain ? rainColor : sunnyColor);
+    light.intensity = isRain ? rainInt : sunnyInt;
+  }
 }
 
 function addCeilingGlowStrips(root) {
@@ -512,8 +529,8 @@ function addCeilingLightFixtures(root) {
 
   [-1.4, 0, 1.4, 2.8].forEach(dz => {
     const mat = baseMat.clone();
-    if (mat.emissive) mat.emissive.setHex(0x00C8FF); else mat.emissive = new THREE.Color(0x00C8FF);
-    mat.emissiveIntensity = 6.5;
+    if (mat.emissive) mat.emissive.setHex(0x48C8D8); else mat.emissive = new THREE.Color(0x48C8D8);
+    mat.emissiveIntensity = 5.0;
     mat.needsUpdate = true;
 
     const mesh = new THREE.Mesh(tplMesh.geometry, mat);
@@ -529,7 +546,7 @@ function addCeilingLightFixtures(root) {
     const pt = new THREE.PointLight(0x00C8FF, 0, 7.5);
     pt.position.set(anchorX, placeY - 0.12, anchorZ + dz);
     scene.add(pt);
-    _interiorLights.push({ light: pt, rain: 0.40, sunny: 0 });
+    _interiorLights.push({ light: pt, rain: 0.28, sunny: 0 });
   });
 }
 
@@ -551,11 +568,11 @@ function addFixtureLights(root) {
     obj.getWorldPosition(pos);
 
     const isRedTube = /^lights(_01)?$/i.test(mat0.name || '');
-    const col = isRedTube ? 0xFF3838 : 0x00C8FF;
+    const col = isRedTube ? 0xFF3838 : 0x48C8D8;
     const pt = new THREE.PointLight(col, 0, 9.0);
     pt.position.set(pos.x, pos.y - 0.08, pos.z);
     scene.add(pt);
-    _interiorLights.push({ light: pt, rain: 1.4, sunny: 0 });
+    _interiorLights.push({ light: pt, rain: 1.0, sunny: 0 });
   });
 }
 
@@ -598,6 +615,13 @@ function addDinerInteriorGlow() {
   // Counter edge — very subtle magenta underfill
   _addInteriorLight(0xC400E8,  0.3, 0.55, -0.8, 4.5, 0.18, 0.00);
   _addInteriorLight(0x451070,  0.3, 0.55, -2.0, 4.5, 0.15, 0.00);
+
+  // Warm practical fill — booth / table / counter areas (rain only, horror contrast 완화)
+  _addInteriorLight(0xFFD0A0, -2.8, 0.55, -1.2, 5.5, 0.18, 0.00);
+  _addInteriorLight(0xF2B16D, -2.8, 0.55, -2.8, 5.5, 0.16, 0.00);
+  _addInteriorLight(0xFFC08A,  0.0, 0.60, -1.8, 5.0, 0.17, 0.00);
+  _addInteriorLight(0xFFD0A0,  2.4, 0.55, -0.8, 5.0, 0.14, 0.00);
+  _addInteriorLight(0xFFC08A,  0.0, 0.60, -0.6, 4.5, 0.15, 0.00);
 }
 
 // ── Rain material system ───────────────────────────────────────────────────
@@ -685,8 +709,8 @@ function _applyRainMaterials(root) {
 
       if (isFixture) {
         const isRedTube = /^lights(_01)?$/i.test(mat.name || '');
-        mat.emissiveIntensity = isRedTube ? 6.5 : 6.5;
-        if (mat.emissive) mat.emissive.setHex(isRedTube ? 0xFF3838 : 0x00C8FF);
+        mat.emissiveIntensity = isRedTube ? 6.5 : 5.0;
+        if (mat.emissive) mat.emissive.setHex(isRedTube ? 0xFF3838 : 0x48C8D8);
       } else if (isSign) {
         // Cherry red neon accent only
         mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.3, 1.1);
@@ -714,10 +738,13 @@ function _applyRainMaterials(root) {
       } else if (isCounter) {
         mat.roughness = Math.min(orig.roughness, 0.22);
         mat.metalness = Math.max(orig.metalness, 0.12);
+        if (orig.color && mat.color) mat.color.copy(orig.color).multiplyScalar(1.30);
       } else {
-        // Walls, ceiling, booths — stay near original warm cream tones, just slightly dimmed
-        mat.emissiveIntensity = orig.emissiveIntensity * 0.55;
+        // Interior walls, ceiling, booths — lift albedo one tone, preserve mood
+        mat.emissiveIntensity = orig.emissiveIntensity * 0.90;
         if (orig.emissive && mat.emissive) mat.emissive.copy(orig.emissive);
+        if (orig.color && mat.color)
+          mat.color.copy(orig.color).multiplyScalar(1.38).lerp(new THREE.Color(0xfff6ee), 0.07);
       }
 
       mat.needsUpdate = true;
