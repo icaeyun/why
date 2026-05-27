@@ -262,10 +262,10 @@ function setWeatherMode(mode) {
 
   hemLight.color.setHex(isRain ? 0xffeedd : 0xffffff);
   hemLight.groundColor.setHex(isRain ? 0x060304 : 0x222222);
-  hemLight.intensity  = isRain ? 0.12 : 0.72;
+  hemLight.intensity  = isRain ? 0.04 : 0.72;
   keyLight.intensity  = isRain ? 0.00 : 1.25;
   fillLight.intensity = isRain ? 0.00 : 0.42;
-  renderer.toneMappingExposure = isRain ? 0.48 : 0.60;
+  renderer.toneMappingExposure = isRain ? 0.54 : 0.60;
 
   for (const { light, rain, sunny } of _interiorLights) {
     light.intensity = isRain ? rain : sunny;
@@ -317,6 +317,7 @@ function prepareMaterials(root, opts = {}) {
         mat.transparent = false;
         mat.depthWrite = true;
       }
+
       mat.needsUpdate = true;
     });
   });
@@ -405,21 +406,35 @@ function _addInteriorLight(color, x, y, z, distance, rain, sunny) {
 function addDinerInteriorGlow() {
   _interiorLights = [];
 
-  // Ceiling fixture overhead — warm tungsten
-  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -0.6, 7.0, 0.38, 0.18);
-  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -2.2, 7.0, 0.35, 0.15);
-  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -3.6, 6.5, 0.30, 0.12);
+  // Main ceiling — warm tungsten overhead (primary light source)
+  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -0.6, 7.0, 0.62, 0.18);
+  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -2.2, 7.0, 0.58, 0.15);
+  _addInteriorLight(0xFFD7A0,  0.0, 2.4, -3.6, 6.5, 0.50, 0.12);
 
-  // Neon sign bleed — cherry red
-  _addInteriorLight(0xFF2A3D,  0.4, 2.2,  0.9, 8.0, 0.28, 0.00);
+  // Neon sign spill — cherry red, subtle
+  _addInteriorLight(0xFF3040,  0.4, 2.2,  0.9, 6.0, 0.20, 0.00);
 
-  // Window rain reflection — cyan (right wall)
-  _addInteriorLight(0x00C8FF,  3.3, 1.5, -0.3, 9.0, 0.24, 0.00);
-  _addInteriorLight(0x00C8FF,  3.3, 1.5, -1.9, 9.0, 0.22, 0.00);
+  // Rainy window reflection — muted steel blue, not electric
+  _addInteriorLight(0x4A7FA8,  3.3, 1.5, -0.3, 8.0, 0.16, 0.00);
+  _addInteriorLight(0x4A7FA8,  3.3, 1.5, -1.9, 8.0, 0.14, 0.00);
 
   // Under-counter warm strip
-  _addInteriorLight(0xFFB86B,  0.3, 0.7, -0.9, 5.0, 0.32, 0.20);
-  _addInteriorLight(0xFFB86B,  0.3, 0.7, -2.3, 5.0, 0.28, 0.16);
+  _addInteriorLight(0xFFB86B,  0.3, 0.7, -0.9, 5.0, 0.34, 0.20);
+  _addInteriorLight(0xFFB86B,  0.3, 0.7, -2.3, 5.0, 0.30, 0.16);
+
+  // Left wall seam — magenta/purple accent (low)
+  _addInteriorLight(0xC400E8, -3.4, 1.95,  0.1, 5.5, 0.22, 0.00);
+  _addInteriorLight(0x451070, -3.4, 1.95, -1.5, 5.5, 0.18, 0.00);
+  _addInteriorLight(0xC400E8, -3.4, 1.95, -3.0, 5.5, 0.20, 0.00);
+
+  // Right wall seam — purple/magenta accent (low)
+  _addInteriorLight(0x451070,  3.4, 1.95,  0.1, 5.5, 0.18, 0.00);
+  _addInteriorLight(0xC400E8,  3.4, 1.95, -1.5, 5.5, 0.22, 0.00);
+  _addInteriorLight(0x451070,  3.4, 1.95, -3.0, 5.5, 0.18, 0.00);
+
+  // Counter edge — very subtle magenta underfill
+  _addInteriorLight(0xC400E8,  0.3, 0.55, -0.8, 4.5, 0.18, 0.00);
+  _addInteriorLight(0x451070,  0.3, 0.55, -2.0, 4.5, 0.15, 0.00);
 }
 
 // ── Rain material system ───────────────────────────────────────────────────
@@ -430,10 +445,13 @@ function _saveMaterialOriginals(root) {
     mats.forEach(mat => {
       if (!mat || _matOriginals.has(mat.uuid)) return;
       _matOriginals.set(mat.uuid, {
-        emissiveIntensity: mat.emissiveIntensity ?? 0,
-        emissive:  mat.emissive  ? mat.emissive.clone()  : null,
-        roughness: mat.roughness ?? 1,
-        metalness: mat.metalness ?? 0,
+        emissiveIntensity:  mat.emissiveIntensity ?? 0,
+        emissive:           mat.emissive  ? mat.emissive.clone()  : null,
+        roughness:          mat.roughness ?? 1,
+        metalness:          mat.metalness ?? 0,
+        color:              mat.color     ? mat.color.clone()     : null,
+        envMapIntensity:    mat.envMapIntensity ?? 1,
+        map:                mat.map       ?? null,
       });
     });
   });
@@ -449,42 +467,96 @@ function _applyRainMaterials(root) {
       if (!orig) return;
       const n = ((mat.name || '') + ' ' + (obj.name || '')).toLowerCase();
 
-      const isFixture = /light|lamp|bulb|fixture|emissor|ceiling|fluor|tube|ceil/.test(n)
+      // Toilet sign — always restore original, never tint
+      if (/toilet/.test(n)) {
+        mat.emissiveIntensity = orig.emissiveIntensity;
+        if (orig.emissive && mat.emissive) mat.emissive.copy(orig.emissive);
+        mat.roughness = orig.roughness;
+        mat.metalness = orig.metalness;
+        mat.needsUpdate = true;
+        return;
+      }
+
+      // Armchair/booth seating — cherry red vinyl, rain only
+      if (/armchair/.test(n)) {
+        if (mat.color) mat.color.setHex(0xD14A43);
+        mat.roughness = 0.40;
+        mat.metalness = 0;
+        mat.emissiveIntensity = 0;
+        if (mat.emissive) mat.emissive.set(0, 0, 0);
+        mat.needsUpdate = true;
+        return;
+      }
+
+      // ── Actual ceiling mesh — emissive red glow panel, rain only ──
+      const _isCeil = (() => {
+        if (/sign|sing|emissor|emissive|neon|menu|letter|logo|billboard|light|glass|window|door|metal|chrome|exterior|outside|stool|chair|booth|floor|tile|counter|railing|trim|frame/.test(n)) return false;
+        const box = new THREE.Box3().setFromObject(obj);
+        const sz  = new THREE.Vector3(); box.getSize(sz);
+        const ct  = new THREE.Vector3(); box.getCenter(ct);
+        return ct.y > 1.2 && sz.y < 0.5 && sz.x > 1.5 && sz.z > 1.5
+            && sz.y < sz.x * 0.4 && sz.y < sz.z * 0.4;
+      })();
+      if (_isCeil) {
+        mat.map   = null;
+        mat.aoMap = null;
+        obj.receiveShadow = false;
+        if (mat.color)    mat.color.setHex(0xE7B9B2);
+        if (mat.emissive) mat.emissive.setHex(0xB84A42);
+        mat.emissiveIntensity = 0.45;
+        mat.roughness = 0.90;
+        mat.metalness = 0;
+        mat.needsUpdate = true;
+        return;
+      }
+
+      const isFixture = /light|lamp|bulb|fixture|emissor|fluor|tube/.test(n)
                      || orig.emissiveIntensity >= 1.0;
-      const isSign    = /sign|neon|logo|diner|script|sing_/.test(n);
+      const isSign    = /\bneon\b|sing_/.test(n);
       const isGlass   = /glass|window|pane/.test(n)
                      || (mat.transparent && (mat.opacity ?? 1) < 0.7);
       const isChrome  = /chrome|metal|steel|stainless|aluminum|trim|edge/.test(n)
                      || (orig.metalness > 0.45 && orig.roughness < 0.40);
-      const isFloor   = /floor|tile|linoleum|ground/.test(n);
+      const isFloor   = /floor|tile|linoleum/.test(n) && !/wood|chair|table|booth|seat|cabinet|wall|ceil/.test(n);
       const isCounter = /counter|tabletop|diner_top|bar_top/.test(n);
 
       if (isFixture) {
-        mat.emissiveIntensity = 6.0;
-        if (mat.emissive) {
-          mat.emissive.setHex(0x00C8FF);
-        }
+        // Tube fluorescents (Lights / Lights_01) → warm cherry red glow
+        // Pendant emissor (Emissor, Emissor.001 …) → keeps cyan blue
+        const isRedTube = /^lights(_01)?$/i.test(mat.name || '');
+        mat.emissiveIntensity = isRedTube ? 4.5 : 6.0;
+        if (mat.emissive) mat.emissive.setHex(isRedTube ? 0xFF3838 : 0x00C8FF);
       } else if (isSign) {
-        mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.2, 0.85);
-        mat.emissive?.setHex(0xFF2A3D);
+        // Cherry red neon accent only
+        mat.emissiveIntensity = Math.min(orig.emissiveIntensity * 1.3, 1.1);
+        if (mat.emissive) mat.emissive.setHex(0xFF2A3D);
       } else if (isGlass) {
         mat.roughness = 0.06;
-        mat.metalness = 0.12;
-        mat.emissiveIntensity = 0.05;
-        mat.emissive?.setHex(0x00080e);
+        mat.metalness = 0.10;
+        mat.emissiveIntensity = 0.02;
+        if (mat.emissive) mat.emissive.setHex(0x02060c);
       } else if (isChrome) {
-        mat.roughness = Math.min(orig.roughness, 0.06);
-        mat.metalness = Math.max(orig.metalness, 0.90);
+        mat.roughness = Math.min(orig.roughness, 0.04);
+        mat.metalness = Math.max(orig.metalness, 0.94);
+        mat.envMapIntensity = 2.8;
         mat.emissiveIntensity = 0;
       } else if (isFloor) {
-        mat.roughness = Math.min(orig.roughness, 0.28);
-        mat.metalness = Math.max(orig.metalness, 0.08);
-        mat.emissiveIntensity = orig.emissiveIntensity * 0.50;
+        // Tint via color multiply — texture stays visible, just slightly cooler+darker
+        if (orig.color && mat.color) {
+          mat.color.copy(orig.color).multiplyScalar(0.72).lerp(new THREE.Color(0x8898AA), 0.18);
+        }
+        mat.roughness = Math.min(orig.roughness, 0.38);
+        mat.metalness = Math.max(orig.metalness, 0.04);
+        mat.envMapIntensity = (orig.envMapIntensity ?? 1) * 1.4;
+        if (mat.emissive) mat.emissive.setHex(0x050810);
+        mat.emissiveIntensity = 0.0;
       } else if (isCounter) {
-        mat.roughness = Math.min(orig.roughness, 0.28);
-        mat.metalness = Math.max(orig.metalness, 0.10);
+        mat.roughness = Math.min(orig.roughness, 0.22);
+        mat.metalness = Math.max(orig.metalness, 0.12);
       } else {
-        mat.emissiveIntensity = orig.emissiveIntensity * 0.75;
+        // Walls, ceiling, booths — stay near original warm cream tones, just slightly dimmed
+        mat.emissiveIntensity = orig.emissiveIntensity * 0.55;
+        if (orig.emissive && mat.emissive) mat.emissive.copy(orig.emissive);
       }
 
       mat.needsUpdate = true;
@@ -502,12 +574,16 @@ function _applySunnyMaterials(root) {
       if (!orig) return;
       mat.emissiveIntensity = orig.emissiveIntensity;
       if (orig.emissive && mat.emissive) mat.emissive.copy(orig.emissive);
+      if (orig.color && mat.color) mat.color.copy(orig.color);
       mat.roughness = orig.roughness;
       mat.metalness = orig.metalness;
+      mat.envMapIntensity = orig.envMapIntensity ?? 1;
+      mat.map = orig.map ?? null;
       mat.needsUpdate = true;
     });
   });
 }
+
 
 function loadDiner() {
   showLoading("Loading...");
@@ -518,6 +594,9 @@ function loadDiner() {
       centerModel(diner);
       diner.position.z += 11.1;
       scene.add(diner);
+      diner.updateMatrixWorld(true);
+
+
       _dinerRoot = diner;
       _saveMaterialOriginals(diner); // snapshot after prepareMaterials = sunny baseline
       addDinerInteriorGlow();
